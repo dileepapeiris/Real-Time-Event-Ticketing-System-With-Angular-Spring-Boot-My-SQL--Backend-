@@ -30,7 +30,6 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 
 @RestController
@@ -424,15 +423,15 @@ public class EventController {
 
     @PostMapping("/stop/{eventId}")
 public ResponseEntity<String> stopEvent(@PathVariable Long eventId, HttpServletRequest request) {
-    // Validate the token
+    // Retrieve the token from the request header
     String token = request.getHeader("Authorization");
     if (token != null && token.startsWith("Bearer ")) {
-        token = token.substring(7);
+        token = token.substring(7); // Remove "Bearer " from the start of the token
     } else {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token is missing or invalid format");
     }
 
-    // Validate the vendor
+    // Validate the token and extract the vendor details
     VendorEntity vendor = authService.validateVendorToken(token);
     if (vendor == null) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid or expired token");
@@ -449,35 +448,17 @@ public ResponseEntity<String> stopEvent(@PathVariable Long eventId, HttpServletR
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Only the event creator can stop the event");
     }
 
-    // Check if the event is already inactive
+    // Check if the event is active
     if (!event.isEventActive()) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body("Event already stopped");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("Event is not active");
     }
-
-    // Get all running threads
-    Set<Thread> runningThreads = Thread.getAllStackTraces().keySet();
-
-    // Find and interrupt the vendor thread associated with this event
-    boolean threadFound = false;
-    for (Thread thread : runningThreads) {
-        if (thread.getName().equals(vendor.getId().toString())) { // Compare thread name with vendor ID
-            thread.interrupt(); // Interrupt the thread
-            threadFound = true;
-            break; // Exit loop after finding the thread
-        }
-    }
-
-    if (!threadFound) {
-        // Log a warning or return a response if the thread is not found
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Vendor thread not found for event ID " + eventId);
-    }
-
-    // Remove the ticket pool associated with this event
-    ticketPoolMap.remove(eventId);
 
     // Mark the event as inactive
     event.setEventActive(false);
     eventRepository.save(event);
+
+    // Remove the ticket pool associated with this event
+    ticketPoolMap.remove(eventId);
 
     return ResponseEntity.ok("Event has been successfully stopped for event ID " + eventId);
 }
